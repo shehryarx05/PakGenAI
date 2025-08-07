@@ -2,5 +2,5 @@ flask
 openai
 twilio
 python-dotenv
-waitress
+gunicorn
 
