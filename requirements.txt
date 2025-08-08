@@ -3,4 +3,6 @@ openai
 twilio
 python-dotenv
 gunicorn
+gspread
+google-auth
 
