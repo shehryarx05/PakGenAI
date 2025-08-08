@@ -45,7 +45,7 @@ def save_feedback_to_sheets(feedback):
     try:
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         sheet.append_row([feedback, ts])
-        print(f"✅ Saved feedback for {phone}")
+        print(f"✅ Saved feedback ")
     except Exception as e:
         # Don't crash the whole app if Sheets fails — just log
         print(f"❌ Failed to save feedback to Google Sheets: {e}")
