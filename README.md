@@ -2,7 +2,7 @@
 
 PakGenAI is a Whatsapp based career guidance chatbot that helps choose students choose careers via Whatsapp.
 
-## 🚀 Features
+## Features
 - **AI-Powered Career Guidance** – Uses OpenAI API for well structured and authentic responses.
 - **WhatsApp Integration** – Powered by Twilio WhatsApp API.
 - **Feedback Collection** – Stores user feedback in Google Sheets.
