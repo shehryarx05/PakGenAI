@@ -40,11 +40,11 @@ except Exception as e:
     # Provide a helpful error if the sheet is not accessible
     raise RuntimeError(f"Failed to open Google Sheet named '{SHEET_NAME}'. Make sure the service account has Editor access and the sheet exists. Error: {e}")
 
-def save_feedback_to_sheets(phone, feedback):
-    """Append a single row: [phone, feedback, timestamp]"""
+def save_feedback_to_sheets(feedback):
+    """Append a single row: [feedback, timestamp]"""
     try:
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        sheet.append_row([phone, feedback, ts])
+        sheet.append_row([feedback, ts])
         print(f"✅ Saved feedback for {phone}")
     except Exception as e:
         # Don't crash the whole app if Sheets fails — just log
@@ -183,7 +183,7 @@ def whatsapp_bot():
         # Save the feedback text (msg), not whole state dict
         user_states[phone]["feedback"] = msg
         try:
-            save_feedback_to_sheets(phone, msg)
+            save_feedback_to_sheets(msg)
         except Exception as e:
             print(f"❌ Error saving feedback: {e}")
         reply.body("✅ Thanks for your feedback! For any queries you can DM us at *PakGenAI* on Instagram.")
