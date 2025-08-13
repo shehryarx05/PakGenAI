@@ -203,7 +203,7 @@ def send_suggestions_and_feedback(phone):
         time.sleep(1)  # spacing to avoid Twilio rate limits
 
     time.sleep(1)
-    send_whatsapp_message(phone, "Was this bot helpful? Any feedback or suggestions?")
+    send_whatsapp_message(phone, "Was this bot helpful? Please reply with feedback and suggestions.")
     user_states[phone]["suggested"] = True
 
 # --- Run block ---
