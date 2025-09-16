@@ -205,6 +205,7 @@ def send_suggestions_and_feedback(phone):
     time.sleep(1)
     send_whatsapp_message(phone, "Was this bot helpful? Please reply with feedback and suggestions.")
     user_states[phone]["suggested"] = True
+    save_feedback_to_sheets("No feedback left")
 
 # --- Run block ---
 if __name__ == '__main__':
