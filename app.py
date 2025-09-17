@@ -2,6 +2,7 @@ import os
 import time
 import json
 import gspread
+import re
 from google.oauth2.service_account import Credentials
 from flask import Flask, request, Response
 from dotenv import load_dotenv
@@ -36,19 +37,52 @@ SHEET_NAME = os.environ.get("SHEET_NAME", "PakGen Feedback")
 
 try:
     sheet = gs_client.open(SHEET_NAME).sheet1
+    
+def init_user_counter(sheet):
+    try:
+        records = sheet.get_all_values()
+        if len(records) > 1:  # assuming row 1 is header
+            last_user = records[-1][0]  # first column = User ID
+            match = re.search(r"User #(\d+)", last_user)
+            if match:
+                return int(match.group(1))
+        return 0
+    except Exception as e:
+        print(f"❌ Could not init user counter: {e}")
+        return 0
+
+user_counter = init_user_counter(sheet)
+
 except Exception as e:
     # Provide a helpful error if the sheet is not accessible
     raise RuntimeError(f"Failed to open Google Sheet named '{SHEET_NAME}'. Make sure the service account has Editor access and the sheet exists. Error: {e}")
 
-def save_feedback_to_sheets(feedback):
-    """Append a single row: [feedback, timestamp]"""
+def save_feedback_placeholder(user_id):
+    """Append a row with 'No feedback left' and return row number"""
     try:
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        sheet.append_row([feedback, ts])
-        print(f"✅ Saved feedback ")
+        sheet.append_row([user_id, "No feedback left", ts])
+        print(f"✅ Placeholder saved for {user_id}")
+        return sheet.row_count  # last row index
     except Exception as e:
-        # Don't crash the whole app if Sheets fails — just log
-        print(f"❌ Failed to save feedback to Google Sheets: {e}")
+        print(f"❌ Failed to save placeholder for {user_id}: {e}")
+        return None
+
+def update_feedback_in_sheets(user_id, feedback):
+    """Update the 'No feedback left' cell for this user_id"""
+    try:
+        cell = sheet.find(user_id)
+        if cell:
+            sheet.update_cell(cell.row, 2, feedback)  # column 2 = feedback
+            print(f"✅ Updated feedback for {user_id}")
+        else:
+            # fallback: append new row if not found
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            sheet.append_row([user_id, feedback, ts])
+            print(f"⚠️ User {user_id} not found, appended new row instead")
+    except Exception as e:
+        print(f"❌ Failed to update feedback: {e}")
+
 
 # --- Flask + OpenAI + Twilio setup ---
 app = Flask(__name__)
@@ -180,32 +214,40 @@ def whatsapp_bot():
 
     # Collect feedback (the user replies after suggested = True)
     if user_states[phone].get("suggested") and "feedback" not in user_states[phone]:
-        # Save the feedback text (msg), not whole state dict
-        user_states[phone]["feedback"] = msg
+        user_feedback = msg
+        user_states[phone]["feedback"] = user_feedback
         try:
-            save_feedback_to_sheets(msg)
+            user_id = user_states[phone]["user_id"]
+            update_feedback_in_sheets(user_id, user_feedback)
         except Exception as e:
             print(f"❌ Error saving feedback: {e}")
         reply.body("✅ Thanks for your feedback! For any queries you can DM us at *PakGenAI* on Instagram.")
         return str(response)
 
-    reply.body("You've completed the quiz. For any queries you can DM us at *PakGenAI* on Instagram.")
+    reply.body("✅ You've completed the quiz. For any queries you can DM us at *PakGenAI* on Instagram.")
     return str(response)
 
 def send_suggestions_and_feedback(phone):
     answers = user_states[phone]["answers"]
     suggestions = get_career_suggestions(answers)
-    user_states[phone]["suggestions"] = suggestions
-    chunks = split_text(suggestions)
+    global user_counter
+    user_counter += 1
+    user_id = f"User #{user_counter}"
+    user_states[phone]["user_id"] = user_id
 
+    # Append placeholder row with "No feedback left"
+    save_feedback_placeholder(user_id)
+
+    # Send suggestions
+    chunks = split_text(suggestions)
     for chunk in chunks:
         send_whatsapp_message(phone, chunk)
-        time.sleep(1)  # spacing to avoid Twilio rate limits
+        time.sleep(1)
 
     time.sleep(1)
     send_whatsapp_message(phone, "Was this bot helpful? Please reply with feedback and suggestions.")
     user_states[phone]["suggested"] = True
-    save_feedback_to_sheets("No feedback left")
+
 
 # --- Run block ---
 if __name__ == '__main__':
