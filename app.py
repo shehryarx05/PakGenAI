@@ -45,7 +45,7 @@ def save_feedback_placeholder():
     try:
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         sheet.append_row(["No feedback left", ts])
-        row_index = sheet.row_count  # last row index
+        row_index = len(sheet.get_all_values())
         print(f"✅ Placeholder saved at row {row_index}")
         return row_index
     except Exception as e:
