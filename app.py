@@ -40,15 +40,26 @@ except Exception as e:
     # Provide a helpful error if the sheet is not accessible
     raise RuntimeError(f"Failed to open Google Sheet named '{SHEET_NAME}'. Make sure the service account has Editor access and the sheet exists. Error: {e}")
 
-def save_feedback_to_sheets(feedback):
-    """Append a single row: [feedback, timestamp]"""
+def save_feedback_placeholder():
+    """Append a row with 'No feedback left' and return row index"""
     try:
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        sheet.append_row([feedback, ts])
-        print(f"✅ Saved feedback ")
+        sheet.append_row(["No feedback left", ts])
+        row_index = sheet.row_count  # last row index
+        print(f"✅ Placeholder saved at row {row_index}")
+        return row_index
     except Exception as e:
-        # Don't crash the whole app if Sheets fails — just log
-        print(f"❌ Failed to save feedback to Google Sheets: {e}")
+        print(f"❌ Failed to save placeholder row: {e}")
+        return None
+
+def update_feedback_in_sheets(row_index, feedback):
+    """Update the placeholder row with actual feedback"""
+    try:
+        sheet.update_cell(row_index, 1, feedback)  # col 1 = feedback column
+        print(f"✅ Feedback updated at row {row_index}")
+    except Exception as e:
+        print(f"❌ Failed to update feedback at row {row_index}: {e}")
+
 
 # --- Flask + OpenAI + Twilio setup ---
 app = Flask(__name__)
@@ -180,14 +191,20 @@ def whatsapp_bot():
 
     # Collect feedback (the user replies after suggested = True)
     if user_states[phone].get("suggested") and "feedback" not in user_states[phone]:
-        # Save the feedback text (msg), not whole state dict
-        user_states[phone]["feedback"] = msg
+        user_feedback = msg
+        user_states[phone]["feedback"] = user_feedback
         try:
-            save_feedback_to_sheets(msg)
+            row_index = user_states[phone].get("sheet_row")
+            if row_index:
+                update_feedback_in_sheets(row_index, user_feedback)
+            else:
+                # fallback: append normally if row not tracked
+                save_feedback_to_sheets(user_feedback)
         except Exception as e:
             print(f"❌ Error saving feedback: {e}")
         reply.body("✅ Thanks for your feedback! For any queries you can DM us at *PakGenAI* on Instagram.")
         return str(response)
+
 
     reply.body("You've completed the quiz. For any queries you can DM us at *PakGenAI* on Instagram.")
     return str(response)
@@ -196,6 +213,12 @@ def send_suggestions_and_feedback(phone):
     answers = user_states[phone]["answers"]
     suggestions = get_career_suggestions(answers)
     user_states[phone]["suggestions"] = suggestions
+
+    # Save placeholder row ("No feedback left")
+    row_index = save_feedback_placeholder()
+    if row_index:
+        user_states[phone]["sheet_row"] = row_index  # remember which row belongs to this user
+    
     chunks = split_text(suggestions)
 
     for chunk in chunks:
