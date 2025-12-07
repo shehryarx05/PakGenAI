@@ -11,14 +11,10 @@ from twilio.twiml.messaging_response import MessagingResponse
 from threading import Thread
 from datetime import datetime
 
-# --- Load local .env for development (safe to keep) ---
 load_dotenv()
 
-# --- Google Sheets setup (reads creds from env variable GOOGLE_CREDS) ---
 google_creds_json = os.environ.get("GOOGLE_CREDS")
 if not google_creds_json:
-    # If you want local testing using a file, you can support that here.
-    # But for production (Render) you should set GOOGLE_CREDS in the service env.
     raise RuntimeError("GOOGLE_CREDS environment variable is not set. Paste service account JSON into that variable.")
 
 try:
@@ -37,7 +33,6 @@ SHEET_NAME = os.environ.get("SHEET_NAME", "PakGen Feedback")
 try:
     sheet = gs_client.open(SHEET_NAME).sheet1
 except Exception as e:
-    # Provide a helpful error if the sheet is not accessible
     raise RuntimeError(f"Failed to open Google Sheet named '{SHEET_NAME}'. Make sure the service account has Editor access and the sheet exists. Error: {e}")
 
 def save_feedback_placeholder():
@@ -55,13 +50,11 @@ def save_feedback_placeholder():
 def update_feedback_in_sheets(row_index, feedback):
     """Update the placeholder row with actual feedback"""
     try:
-        sheet.update_cell(row_index, 1, feedback)  # col 1 = feedback column
+        sheet.update_cell(row_index, 1, feedback)
         print(f"✅ Feedback updated at row {row_index}")
     except Exception as e:
         print(f"❌ Failed to update feedback at row {row_index}: {e}")
 
-
-# --- Flask + OpenAI + Twilio setup ---
 app = Flask(__name__)
 
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -74,10 +67,8 @@ if not (twilio_sid and twilio_auth and twilio_whatsapp_number):
 
 twilio_client = TwilioClient(twilio_sid, twilio_auth)
 
-# --- In-memory user state (OK for MVP) ---
 user_states = {}
 
-# --- Questions ---
 questions = [
     "1️⃣ What is your current education stream? (FSc Pre-Med, FSc Pre-Engg, ICS, FA, A Levels, IB, etc.)",
     "2️⃣ What is your favorite subject in school or college?",
@@ -166,7 +157,6 @@ def whatsapp_bot():
 
     state = user_states[phone]["step"]
 
-    # Start
     if state == -1:
         if lower_msg == "ready":
             user_states[phone]["step"] = 0
@@ -175,7 +165,6 @@ def whatsapp_bot():
             reply.body("Please type *ready* to begin the quiz.")
         return str(response)
 
-    # During quiz
     if 0 <= state < len(questions):
         user_states[phone]["answers"].append(msg)
         user_states[phone]["step"] += 1
@@ -185,11 +174,9 @@ def whatsapp_bot():
             reply.body(questions[state])
         else:
             reply.body("⏳ Analyzing your answers...")
-            # run OpenAI & sending in background
             Thread(target=send_suggestions_and_feedback, args=(phone,)).start()
         return str(response)
 
-    # Collect feedback (the user replies after suggested = True)
     if user_states[phone].get("suggested") and "feedback" not in user_states[phone]:
         user_feedback = msg
         user_states[phone]["feedback"] = user_feedback
@@ -198,7 +185,6 @@ def whatsapp_bot():
             if row_index:
                 update_feedback_in_sheets(row_index, user_feedback)
             else:
-                # fallback: append normally if row not tracked
                 save_feedback_to_sheets(user_feedback)
         except Exception as e:
             print(f"❌ Error saving feedback: {e}")
@@ -214,22 +200,20 @@ def send_suggestions_and_feedback(phone):
     suggestions = get_career_suggestions(answers)
     user_states[phone]["suggestions"] = suggestions
 
-    # Save placeholder row ("No feedback left")
     row_index = save_feedback_placeholder()
     if row_index:
-        user_states[phone]["sheet_row"] = row_index  # remember which row belongs to this user
+        user_states[phone]["sheet_row"] = row_index 
     
     chunks = split_text(suggestions)
 
     for chunk in chunks:
         send_whatsapp_message(phone, chunk)
-        time.sleep(1)  # spacing to avoid Twilio rate limits
+        time.sleep(1)
 
     time.sleep(1)
     send_whatsapp_message(phone, "Was this bot helpful? Please reply with feedback and suggestions.")
     user_states[phone]["suggested"] = True
 
-# --- Run block ---
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
